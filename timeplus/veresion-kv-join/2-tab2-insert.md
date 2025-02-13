@@ -1,5 +1,5 @@
 ```bash tab=2
-proton client -h 127.0.0.1 -m
+proton client -h 127.0.0.1 -m --config-file=/Users/jove/proton-config.xml
 ```
 
 ```sql tab=2

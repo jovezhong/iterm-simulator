@@ -1,3 +1,4 @@
+from icecream import ic
 import iterm2
 import asyncio
 import re
@@ -73,9 +74,9 @@ def press(keys):
 def paste_from_clipboard():
     content = clipboard.pop(0)
     # subprocess.run(f'echo "{content}" | pbcopy', shell=True)
-    
+
     pyperclip.copy(content)
-    
+
     apple_script = '''
     tell application "System Events"
         keystroke "v" using command down
@@ -100,7 +101,7 @@ pyautogui_shortcuts = {
     "Delete": lambda: pyautogui.press('delete'),
     "Tab": lambda: pyautogui.press('tab'),
     "pyArrowUp": lambda: pyautogui.press('up'),
-    "pySpace": lambda: pyautogui.press('space'),    
+    "pySpace": lambda: pyautogui.press('space'),
     "pyArrowLeft": lambda: pyautogui.press('left'),
     "CopyMode": lambda: multi_press("shift", "command", "C"),
     "SelectByCharacter": lambda: pyautogui.hotkey('c', 'space'),
@@ -126,8 +127,7 @@ valid_prompts = [
     ">",
     'MN :)',
     ':)',
-    '😊',
-    '⚡',
+    '',
     '"Modelfile" [New]',
     '-- INSERT --'
     '-- INSERT --',
@@ -180,7 +180,7 @@ async def simulated_typing(session, command, delay=0.1):
     text = command.text()
     press_enter = command.press_enter
     press_shift_enter = command.press_shift_enter
-    wait = command.wait_for_prompt    
+    wait = command.wait_for_prompt
 
     if "less" in text.strip():
         in_less = True
@@ -197,18 +197,18 @@ async def simulated_typing(session, command, delay=0.1):
             await session.async_send_text(char)
             await asyncio.sleep(delay)
         if press_enter:
-            print(f"Press enter [{press_enter}], Wait [{wait}], Command [{command}]")
+            ic(f"Press enter [{press_enter}], Wait [{wait}], Command [{command}]")
             await session.async_send_text("\n")
             if wait:
                 await wait_for_prompt(session)
-            else: 
+            else:
                 await asyncio.sleep(0.1)
         if press_shift_enter:
             print(f"Press shift enter [{press_shift_enter}], Wait [{wait}], Command [{command}]")
             pyautogui_shortcuts["Shift+Enter"]()
             if wait:
                 await wait_for_prompt(session)
-            else: 
+            else:
                 await asyncio.sleep(0.1)
 
     # Check if it's a command to exit from less (typically "q")
@@ -229,6 +229,7 @@ async def find_or_create_session(app, window_index=None, tab_index=None):
     await window.async_activate()
 
     tabs = window.tabs
+    ic(tabs)
     if tab_index is not None and 0 <= tab_index < len(tabs):
         tab = tabs[tab_index]
     else:
@@ -246,6 +247,7 @@ async def find_or_create_session(app, window_index=None, tab_index=None):
     return session
 
 async def select_tab(app, window_index=None, tab_index=None):
+    ic()
     # Get the list of windows
     windows = app.windows
 
@@ -292,9 +294,9 @@ KEYWORD = pp.Word(pp.alphas + pp.nums + "+")
 
 SLEEP_TIME = pp.Suppress(pp.Literal("sleep=")) + FLOAT
 
-keyboard_command = (LBRACK + KEYWORD("keyword") + 
-                    pp.Optional(ASTERISK + MULTIPLIER("multiplier") + 
-                                SLEEP_TIME("sleep_time")) + 
+keyboard_command = (LBRACK + KEYWORD("keyword") +
+                    pp.Optional(ASTERISK + MULTIPLIER("multiplier") +
+                                SLEEP_TIME("sleep_time")) +
                     RBRACK)
 
 EQUALS = pp.Literal("=")
@@ -346,10 +348,11 @@ def extract_commands_from_text(content):
     items = []
 
     for token in tokens:
+        ic(token)
         if token.type == "fence" and token.tag == "code":
-            print("token.info", token.info)
+            ic("token.info", token.info)
             attributes = extract_attributes_from_info(token.info)
-            print("attributes", attributes)
+            ic("attributes", attributes)
 
             sleep_before = float(attributes.get("sleepBefore", 0))
             sleep_after = float(attributes.get("sleep", 1))
@@ -364,11 +367,11 @@ def extract_commands_from_text(content):
             if copy_to_clipboard:
                 if strip_whitespace:
                     clipboard.append(token.content.rstrip())
-                else: 
+                else:
                     clipboard.append(token.content)
                 continue
 
-            
+
             print("token.content", token.content, soft_enter)
             if soft_enter:
                 print("soft_enter", send_enter)
@@ -378,7 +381,7 @@ def extract_commands_from_text(content):
                     items.append(Command(line, sleep_before, sleep_after, False, False, strip_whitespace, wait_for_prompt=False, selected_tab=selected_tab))
                     items.append(Command("Ctrl+Q", sleep_before, sleep_after/2, True, strip_whitespace, wait_for_prompt=False, selected_tab=selected_tab))
                     items.append(Command("Ctrl+J", sleep_before, sleep_after/2, True, strip_whitespace, wait_for_prompt=False, selected_tab=selected_tab))
-                
+
                 items.append(Command(lines[-1], sleep_before, sleep_after, send_enter, send_shift_enter, strip_whitespace, wait_for_prompt=wait_prompt, selected_tab=selected_tab))
             else:
                 command = Command(token.content, sleep_before, sleep_after, send_enter, send_shift_enter, strip_whitespace, wait_for_prompt=wait_prompt, selected_tab=selected_tab)
@@ -391,11 +394,11 @@ def extract_commands_from_text(content):
                 keyword = match["keyword"]
                 mul = match.get("multiplier", 1)
                 sleep = match["sleep_time"][0] if "sleep_time" in match else 1
-                print("Token:", token.content, "Keyword: ", keyword, "Mul:", mul, "Sleep:", sleep, "Match:", match)
+                ic("Token:", token.content, "Keyword: ", keyword, "Mul:", mul, "Sleep:", sleep, "Match:", match)
                 for _ in range(mul):
                     items.append(Command(item = keyword, sleep_after=sleep))
             except pp.ParseException:
-                print("No match for:" + token.content)
+                ic("No match for:" + token.content)
                 pass  # Not a recognized keyboard command
 
 
@@ -404,25 +407,25 @@ def extract_commands_from_text(content):
 
 
 async def main(connection, args):
-    print(args)
+    ic(args)
 
     turbo_pause = args.turbo_pause
 
     activate_iterm()
     app = await iterm2.async_get_app(connection)
-    
+
     # Find or create the specific window, tab, and session
     window_index = args.window
     tab_index = args.tab
     session = await find_or_create_session(app, window_index=window_index, tab_index=tab_index)
 
     commands = extract_commands_from_md(args.filename)
-    
+
     for command in commands:
         print(command)
-        # item, sleep_before, sleep_after, press_enter, soft_enter, strip, wait_for_prompt, selected_tab = astuple(command)        
+        # item, sleep_before, sleep_after, press_enter, soft_enter, strip, wait_for_prompt, selected_tab = astuple(command)
         item, sleep_before, sleep_after, press_enter, press_shift_enter, strip, wait_for_prompt, selected_tab = astuple(command)
-        print("item:", item, sleep_after, press_enter, keyboard_shortcuts.get(item))
+        ic("item:", item, sleep_after, press_enter, keyboard_shortcuts.get(item))
         if item in keyboard_shortcuts:
             print(f"Send keyboard command for {item} -> {keyboard_shortcuts[item]}")
             await session.async_send_text(keyboard_shortcuts[item])
@@ -437,7 +440,7 @@ async def main(connection, args):
         else:
             await asyncio.sleep((sleep_before or 0) / args.turbo_pause)
             await simulated_typing(session, command = command, delay=args.delay)
-            print("Sleep", sleep_after)
+            ic("Sleep", sleep_after)
             await asyncio.sleep((sleep_after or 1) / args.turbo_pause)
 
 if __name__ == "__main__":
@@ -445,9 +448,8 @@ if __name__ == "__main__":
     parser.add_argument('--filename', metavar='v', type=str)
     parser.add_argument('--window', metavar='v', type=int, default=0)
     parser.add_argument('--tab', metavar='v', type=int, default=0)
-    parser.add_argument('--delay', metavar='v', type=float, default=0.1)
+    parser.add_argument('--delay', metavar='v', type=float, default=0.1) #second between each typing
     parser.add_argument('--turbo-pause', metavar='v', type=float, default=1.0)
     args = parser.parse_args()
 
     iterm2.run_until_complete(lambda conn: main(conn, args))
-

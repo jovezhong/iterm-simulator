@@ -3,7 +3,7 @@
 Start the client
 
 ```bash
-proton client -h 127.0.0.1 -m
+proton client -h 127.0.0.1 -m --config-file=/Users/jove/proton-config.xml
 ```
 
 Highlight it needs 1.5.7 and create the stream
