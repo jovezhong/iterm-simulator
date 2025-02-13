@@ -9,13 +9,14 @@ import argparse
 import pyautogui
 import subprocess
 from functools import partial
+import pyperclip
 
 
 keyboard_shortcuts = {
     "Ctrl+A": '\x01',  # Move to the beginning of the line
     "Ctrl+B": '\x02',  # Move backward one character
     "Ctrl+C": '\x03',  # Interrupt (send SIGINT to) the current process
-    "Ctrl+D": '\x04',  # Delete the character under the cursor (EOF if line is empty)
+    # "Ctrl+D": '\x04',  # Delete the character under the cursor (EOF if line is empty)
     "Ctrl+E": '\x05',  # Move to the end of the line
     "Ctrl+F": '\x06',  # Move forward one character
     "Ctrl+G": '\x07',  # Bell (beep)
@@ -51,29 +52,86 @@ keyboard_shortcuts = {
     'Escape': '\x1b',
 }
 
+clipboard = []
+
 def move(direction, modifier):
-    pyautogui.keyDown(modifier)
-    pyautogui.press(direction)
-    pyautogui.keyUp(modifier)
+        pyautogui.keyDown(modifier)
+        pyautogui.press(direction)
+        pyautogui.keyUp(modifier)
+
+def multi_press(modifier1, modifier2, key):
+    pyautogui.keyDown(modifier1)
+    pyautogui.keyDown(modifier2)
+    pyautogui.press(key)
+    pyautogui.keyUp(modifier2)
+    pyautogui.keyUp(modifier1)
+
+def press(keys):
+    for key in keys:
+        pyautogui.press(key)
+
+def paste_from_clipboard():
+    content = clipboard.pop(0)
+    # subprocess.run(f'echo "{content}" | pbcopy', shell=True)
+    
+    pyperclip.copy(content)
+    
+    apple_script = '''
+    tell application "System Events"
+        keystroke "v" using command down
+    end tell
+    '''
+
+    subprocess.run(['osascript', '-e', apple_script])
+
 
 pyautogui_shortcuts = {
     "ScrollUpOneLine": partial(move, 'up', 'command'),
+    "ScrollUpOnePage": partial(move, 'pageup', 'command'),
     "ScrollDownOneLine": partial(move, 'down', 'command'),
+    "Shift+G": partial(move, 'g', 'shift'),
     "Alt+Left": partial(move, 'left', 'alt'),
+    "Alt+Backspace": partial(move, 'backspace', 'alt'),
     "Alt+Right": partial(move, 'right', 'alt'),
-    "Delete": lambda: pyautogui.press('delete')
+    "Command+C": partial(move, 'c', 'command'),
+    "Command+V": partial(move, 'v', 'command'),
+    "Command+Right": partial(move, 'right', 'command'),
+    "Shift+Enter": partial(move, 'enter', 'shift'),
+    "Delete": lambda: pyautogui.press('delete'),
+    "Tab": lambda: pyautogui.press('tab'),
+    "pyArrowUp": lambda: pyautogui.press('up'),
+    "pySpace": lambda: pyautogui.press('space'),    
+    "pyArrowLeft": lambda: pyautogui.press('left'),
+    "CopyMode": lambda: multi_press("shift", "command", "C"),
+    "SelectByCharacter": lambda: pyautogui.hotkey('c', 'space'),
+    'Alt+Backspace': partial(move, 'delete', 'alt'),
+    "Shift+G": partial(move, 'g', 'shift'),
+    "Shift+O": partial(move, 'o', 'shift'),
+    "Delete": lambda: pyautogui.press('delete'),
+    "Shift+Enter": partial(move, 'enter', 'shift'),
+    "Cmd+V": paste_from_clipboard,
+    "Ctrl+D": partial(move, 'd', 'ctrl'),
+    "Command+Space": partial(move, 'space', 'command')
 }
 
 valid_prompts = [
     "$",
+    "(.venv) $",
+    "(.venv) (base) $",
     ">>>",
     ">>> Send a message (/? for help)",
     "...",
+    ":",
     '⚫◗',
+    ">",
     'MN :)',
     ':)',
+    '😊',
+    '⚡',
     '"Modelfile" [New]',
     '-- INSERT --'
+    '-- INSERT --',
+    "   - If you want to submit another line, end your input with '\'."
 ] + [f"In [{id}]:" for id in range(0,1000)]
 
 def activate_iterm():
@@ -83,10 +141,6 @@ def activate_iterm():
         end tell
     """
     os.system(f"osascript -e '{script}'")
-
-# # Then call this function at the appropriate place in your script
-# activate_iterm()
-
 
 
 async def wait_for_prompt(session):
@@ -125,6 +179,7 @@ async def simulated_typing(session, command, delay=0.1):
 
     text = command.text()
     press_enter = command.press_enter
+    press_shift_enter = command.press_shift_enter
     wait = command.wait_for_prompt    
 
     if "less" in text.strip():
@@ -144,6 +199,13 @@ async def simulated_typing(session, command, delay=0.1):
         if press_enter:
             print(f"Press enter [{press_enter}], Wait [{wait}], Command [{command}]")
             await session.async_send_text("\n")
+            if wait:
+                await wait_for_prompt(session)
+            else: 
+                await asyncio.sleep(0.1)
+        if press_shift_enter:
+            print(f"Press shift enter [{press_shift_enter}], Wait [{wait}], Command [{command}]")
+            pyautogui_shortcuts["Shift+Enter"]()
             if wait:
                 await wait_for_prompt(session)
             else: 
@@ -226,7 +288,7 @@ RBRACK = pp.Literal("]")
 ASTERISK = pp.Literal("*")
 MULTIPLIER = pp.Word(pp.nums).setParseAction(lambda t: int(t[0]))
 FLOAT = pp.Combine(pp.Word(pp.nums) + pp.Optional(pp.Literal(".") + pp.Word(pp.nums))).setParseAction(lambda t: float(t[0]))
-KEYWORD = pp.Word(pp.alphas + "+")
+KEYWORD = pp.Word(pp.alphas + pp.nums + "+")
 
 SLEEP_TIME = pp.Suppress(pp.Literal("sleep=")) + FLOAT
 
@@ -236,12 +298,13 @@ keyboard_command = (LBRACK + KEYWORD("keyword") +
                     RBRACK)
 
 EQUALS = pp.Literal("=")
-ATTRIBUTE_NAME = pp.Word(pp.alphas)
+ATTRIBUTE_NAME = pp.Word(pp.alphas + "_")
 ATTRIBUTE_VALUE = FLOAT | pp.Keyword("true") | pp.Keyword("false")
 ATTRIBUTE = ATTRIBUTE_NAME("name") + pp.Suppress(EQUALS) + ATTRIBUTE_VALUE("value")
 ALL_ATTRIBUTES = pp.OneOrMore(ATTRIBUTE)
 
 def extract_attributes_from_info(info_string):
+    print("info_string", info_string)
     attributes = {}
     matches = ALL_ATTRIBUTES.searchString(info_string)
     if len(matches) > 0:
@@ -265,6 +328,7 @@ class Command:
     sleep_before: float = 0.0
     sleep_after: float = 1.0
     press_enter: bool = True
+    press_shift_enter: bool = False
     strip: bool = True
     wait_for_prompt: bool = False
     selected_tab: int = -1
@@ -290,13 +354,36 @@ def extract_commands_from_text(content):
             sleep_before = float(attributes.get("sleepBefore", 0))
             sleep_after = float(attributes.get("sleep", 1))
             send_enter = attributes.get("enter", "true") == "true"
+            soft_enter = attributes.get("soft_enter", "false") == "true"
+            send_shift_enter = attributes.get("shiftEnter", "false") == "true"
             strip_whitespace = attributes.get("strip", "true") == "true"
             wait_prompt = attributes.get("wait", "true") == "true"
             selected_tab = int(attributes.get("tab", "-1"))
+
+            copy_to_clipboard = attributes.get("copyToClipboard", "false") == "true"
+            if copy_to_clipboard:
+                if strip_whitespace:
+                    clipboard.append(token.content.rstrip())
+                else: 
+                    clipboard.append(token.content)
+                continue
+
             
-            command = Command(token.content, sleep_before, sleep_after, send_enter, strip_whitespace, wait_for_prompt=wait_prompt, selected_tab=selected_tab)
-            print("send_enter", send_enter, "wait_prompt", wait_prompt, "token.content", token.content, "Command", command)
-            items.append(command)
+            print("token.content", token.content, soft_enter)
+            if soft_enter:
+                print("soft_enter", send_enter)
+                lines = token.content.strip().split("\n")
+                print("lines", lines)
+                for line in lines[:-1]:
+                    items.append(Command(line, sleep_before, sleep_after, False, False, strip_whitespace, wait_for_prompt=False, selected_tab=selected_tab))
+                    items.append(Command("Ctrl+Q", sleep_before, sleep_after/2, True, strip_whitespace, wait_for_prompt=False, selected_tab=selected_tab))
+                    items.append(Command("Ctrl+J", sleep_before, sleep_after/2, True, strip_whitespace, wait_for_prompt=False, selected_tab=selected_tab))
+                
+                items.append(Command(lines[-1], sleep_before, sleep_after, send_enter, send_shift_enter, strip_whitespace, wait_for_prompt=wait_prompt, selected_tab=selected_tab))
+            else:
+                command = Command(token.content, sleep_before, sleep_after, send_enter, send_shift_enter, strip_whitespace, wait_for_prompt=wait_prompt, selected_tab=selected_tab)
+                print("send_enter", send_enter, "wait_prompt", wait_prompt, "token.content", token.content, "Command", command)
+                items.append(command)
 
         elif token.type == "inline":
             try:
@@ -330,8 +417,11 @@ async def main(connection, args):
     session = await find_or_create_session(app, window_index=window_index, tab_index=tab_index)
 
     commands = extract_commands_from_md(args.filename)
+    
     for command in commands:
-        item, sleep_before, sleep_after, press_enter, strip, wait_for_prompt, selected_tab = astuple(command)
+        print(command)
+        # item, sleep_before, sleep_after, press_enter, soft_enter, strip, wait_for_prompt, selected_tab = astuple(command)        
+        item, sleep_before, sleep_after, press_enter, press_shift_enter, strip, wait_for_prompt, selected_tab = astuple(command)
         print("item:", item, sleep_after, press_enter, keyboard_shortcuts.get(item))
         if item in keyboard_shortcuts:
             print(f"Send keyboard command for {item} -> {keyboard_shortcuts[item]}")
