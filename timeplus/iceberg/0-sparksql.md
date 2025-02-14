@@ -27,8 +27,9 @@ show databases;
 ```
 
 ```
-use gimitest;
+use iceberg;
 show tables;
-select * from coo;
+select * from transformed;
+select count(*) from transformed;
 quit;
 ```
